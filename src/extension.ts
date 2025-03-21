@@ -70,7 +70,10 @@ async function getSftpConfig(): Promise<config | config[] | null> {
                     username: remoteConfig.username,
                     privateKeyPath: remoteConfig.privateKeyPath,
                     remotePath: sftpConfig.remotePath,
-                    ignore: sftpConfig.ignore || [] // 新增 ignore 字段
+                    ignore: sftpConfig.ignore || [], // 新增 ignore 字段
+                    rsyncPath: sftpConfig.rsyncPath || 'rsync', // 新增：读取自定义rsync路径，默认为'rsync'
+                    sshPath: sftpConfig.sshPath || 'ssh',     // 新增：读取自定义ssh路径，默认为'ssh'
+                    rsyncOptions: sftpConfig.rsyncOptions || '' // 新增：读取自定义rsync附加参数
                 };
                 configs.push(mergedConfig);
             }
@@ -102,6 +105,9 @@ type config = {
   remotePath: string | undefined;
   privateKeyPath: string | undefined;
   ignore: string[]; // 新增 ignore 字段
+  rsyncPath?: string; // 新增：自定义rsync程序路径
+  sshPath?: string;   // 新增：自定义ssh程序路径
+  rsyncOptions?: string; // 新增：rsync附加参数
 }
 
 // 新增一个模块级别的终端实例
@@ -111,8 +117,11 @@ let terminal: vscode.Terminal | null = null;
 const TERMINAL_NAME = 'SFTP-RSync';
 
 function syncProjectWithRsync(localPath: string, c: config) {
+    // 使用自定义ssh路径（如果有）
+    const sshPathExe = c.sshPath || 'ssh';
+    
     // 拼接SSH命令
-    let sshCommand = `ssh -o StrictHostKeyChecking=no`;
+    let sshCommand = `${sshPathExe} -o StrictHostKeyChecking=no`;
     if (c.privateKeyPath) {
         sshCommand += ` -i ${c.privateKeyPath}`;
     }
@@ -124,8 +133,11 @@ function syncProjectWithRsync(localPath: string, c: config) {
     localPath = localPath.replace(/\\/g, '/');
     localPath = localPath.replace(/^([a-zA-Z]):\//, '/cygdrive/$1/');
 
-    // 拼接rsync命令，添加忽略选项
-    let command = `rsync -av -e "${sshCommand}" '${localPath}/' ${c.username}@${c.host}:${c.remotePath}`;
+    // 使用自定义rsync路径（如果有）
+    const rsyncPathExe = c.rsyncPath || 'rsync';
+    
+    // 拼接rsync命令，添加基本选项、自定义附加参数和忽略选项
+    let command = `${rsyncPathExe} -av ${c.rsyncOptions || ''} -e "${sshCommand}" '${localPath}/' ${c.username}@${c.host}:${c.remotePath}`;
     if (c.ignore && c.ignore.length > 0) {
         const ignoreOptions = c.ignore.map((ignoreItem: string) => `--exclude '${ignoreItem}'`).join(' ');
         command += ` ${ignoreOptions}`;
